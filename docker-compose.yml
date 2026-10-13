@@ -1,0 +1,67 @@
+services:
+  app:
+    build: .
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      APP_DB_HOST: db
+      APP_DB_PORT: 3306
+      APP_DB_USER: ${APP_DB_USER:?set APP_DB_USER in .env}
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD:?set APP_DB_PASSWORD in .env}
+      APP_DB_NAME: ${APP_DB_NAME:?set APP_DB_NAME in .env}
+    ports:
+      - "127.0.0.1:${WEB_PORT:-8080}:8000"
+    depends_on:
+      db-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  db-init:
+    image: mysql:9
+    environment:
+      DB_USER: ${APP_DB_USER:?set APP_DB_USER in .env}
+      DB_PASSWORD: ${APP_DB_PASSWORD:?set APP_DB_PASSWORD in .env}
+      DB_NAME: ${APP_DB_NAME:?set APP_DB_NAME in .env}
+    volumes:
+      - ./database.sql:/database.sql:ro
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+        set -e
+        # Option file keeps the password off the command line.
+        printf '[client]\nhost=db\nuser="%s"\npassword="%s"\n' "$$DB_USER" "$$DB_PASSWORD" > /tmp/client.cnf
+        count=$$(mysql --defaults-extra-file=/tmp/client.cnf -N -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE()" "$$DB_NAME")
+        if [ "$$count" = "0" ]; then
+          echo "No tables in $$DB_NAME; applying database.sql"
+          mysql --defaults-extra-file=/tmp/client.cnf "$$DB_NAME" < /database.sql
+        else
+          echo "$$DB_NAME already has $$count table(s); skipping database.sql"
+        fi
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
+  db:
+    image: mysql:9
+    environment:
+      MYSQL_ROOT_PASSWORD: ${APP_DB_PASSWORD:?set APP_DB_PASSWORD in .env}
+      MYSQL_DATABASE: ${APP_DB_NAME:?set APP_DB_NAME in .env}
+      MYSQL_USER: ${APP_DB_USER:?set APP_DB_USER in .env}
+      MYSQL_PASSWORD: ${APP_DB_PASSWORD:?set APP_DB_PASSWORD in .env}
+    # Bound to localhost so MySQL Workbench on this machine can connect without exposing MySQL to the network.
+    ports:
+      - "127.0.0.1:${MYSQL_HOST_PORT:-3306}:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p\"$$MYSQL_ROOT_PASSWORD\" --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+    restart: unless-stopped
+
+volumes:
+  mysql-data:
