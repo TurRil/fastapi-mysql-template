@@ -15,13 +15,60 @@ python -m venv .venv
 
 Open http://127.0.0.1:8000/ for the Jinja2-rendered home page.
 
-The status endpoint at http://127.0.0.1:8000/api/status returns:
+The status endpoint at http://127.0.0.1:8000/status returns:
 
 ```json
 {"status": "ok"}
 ```
 
 Interactive API documentation is available at http://127.0.0.1:8000/docs.
+
+## API Endpoints
+
+The API is available at the root of the application (there is no `/api` prefix).
+
+| Method | Path | Description |
+| --- | --- | --- |
+| `GET` | `/status` | Returns `{"status":"ok"}`. |
+| `POST` | `/transactions` | Categorizes and saves a transaction; returns the saved transaction with HTTP `201`. Requires `OPENAI_API_KEY`. |
+| `GET` | `/transactions` | Returns transactions, newest first. |
+| `GET` | `/transactions/{transaction_id}` | Returns one transaction, or HTTP `404` if it does not exist. |
+
+Submit a transaction with these fields:
+
+```json
+{
+	"transaction_id": "TXN00001",
+	"amount": -87.18,
+	"transaction_date": "2024-05-16T07:22:18.808433",
+	"description": "Municipal Tax Payment",
+	"transaction_type": "debit",
+	"account_number": "NLINGB1944573686"
+}
+```
+
+The response includes the submitted fields, `created_at`, and the generated
+integer `classification`.
+
+The endpoint returns HTTP `503` when the key is missing and
+HTTP `502` if categorization fails.
+
+`GET /transactions` accepts optional query parameters. Combine any of these to
+filter results:
+
+| Parameter | Description |
+| --- | --- |
+| `classification` | Match an integer classification ID. |
+| `transaction_type` | Match `debit` or `credit`. |
+| `account_number` | Match an account number. |
+| `start_date` | Include transactions on or after this ISO 8601 date/time. |
+| `end_date` | Include transactions on or before this ISO 8601 date/time. |
+| `search` | Case-insensitive substring match on the description. |
+| `limit` | Maximum results (`1`-`500`; default `100`). |
+| `offset` | Number of matching results to skip (default `0`). |
+
+For example, `/transactions?transaction_type=debit&start_date=2024-01-01T00:00:00&limit=25`
+returns up to 25 debit transactions from that date onward.
 
 ## Run with Docker
 
@@ -47,20 +94,9 @@ applied when the volume is first created; after changing them, run
 Configuration is read from environment variables or an optional `.env` file in
 the project root. Environment variables take precedence over `.env` values.
 
-```dotenv
-APP_TITLE=FastAPI
-APP_VERSION=0.1.0
-APP_DEBUG=false
-APP_API_PREFIX=/api
-```
-
 These are the defaults. Restart the application after changing configuration.
 Keep debug mode disabled outside local development. The `.env` file is ignored
 by Git.
-
-`APP_API_PREFIX` controls where the API router is mounted. It must start with
-`/` and must not end with `/`. For example, `/api/v1` exposes the status route at
-`/api/v1/status`. The home page's status link follows the configured prefix.
 
 ## Database
 
@@ -81,24 +117,6 @@ tables at startup. `Settings.database_url` builds the connection URL safely,
 including credentials with special characters, and uses `utf8mb4`.
 
 Define SQLAlchemy models by inheriting from `Base` in `app/db/models.py`.
-Use `get_db` from `app/db/session.py` as a FastAPI dependency:
-
-```python
-from typing import Annotated
-
-from fastapi import Depends
-from sqlalchemy.orm import Session
-
-from app.db.session import get_db
-
-DatabaseSession = Annotated[Session, Depends(get_db)]
-```
-
-Declare a `db: DatabaseSession` parameter in synchronous (`def`) database route
-handlers because PyMySQL performs blocking I/O. Sessions close after each request;
-call `db.commit()` explicitly when saving changes. Connections are opened lazily,
-when a query first runs. The `/api/status` route remains an application status
-check, not a database health check.
 
 FastAPI's lifespan makes the shared engine and session factory available as
 `app.state.db_engine` and `app.state.db_session_factory`. The connection pool
@@ -112,6 +130,6 @@ is disposed on shutdown. Startup does not open or verify a MySQL connection.
 - `app/db/session.py`: database engine, session factory, and session dependency.
 - `app/site/routes.py`: UI routes.
 - `app/site/templates/home.html`: home page template.
-- `app/api/routes.py`: API routes, mounted under `/api`.
+- `app/api/routes.py`: API routes, mounted at the application root.
 
 The routers live under `app` to avoid colliding with Python's built-in `site` module.

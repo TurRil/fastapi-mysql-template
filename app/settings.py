@@ -21,16 +21,17 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    title: str = "FastAPI"
-    version: str = "0.1.0"
-    debug: bool = False
-    api_prefix: str = Field(default="/api", pattern=r"^/[^?#]*[^/?#]$")
+    title: str = Field('FastAPI', validation_alias='APP_TITLE', description='The title of the FastAPI application.')
+    version: str = Field('0.1.0', validation_alias='APP_VERSION', description='The version of the FastAPI application.')
+    debug: bool = Field(False, validation_alias='APP_DEBUG', description='Enable or disable debug mode for the FastAPI application.')
 
-    db_host: str = "localhost"
-    db_port: int = Field(default=3307, ge=1, le=65535)
-    db_user: str = "root"
-    db_password: SecretStr = SecretStr("")
-    db_name: str = "simple"
+    db_host: str = Field('localhost', validation_alias='APP_DB_HOST', description='The database host for the FastAPI application.')
+    db_port: int = Field(default=3307, ge=1, le=65535, validation_alias='APP_DB_PORT', description='The database port for the FastAPI application.')
+    db_user: str = Field('root', validation_alias='APP_DB_USER', description='The database user for the FastAPI application.')
+    db_password: SecretStr = Field(default=SecretStr(""), validation_alias='APP_DB_PASSWORD', description='The database password for the FastAPI application.')
+    db_name: str = Field('simple', validation_alias='APP_DB_NAME', description='The database name for the FastAPI application.')
+
+    openai_api_key: SecretStr = Field(default=SecretStr(""), validation_alias="OPENAI_API_KEY", description='The OpenAI API key for the FastAPI application.')
 
     @property
     def database_url(self) -> URL:

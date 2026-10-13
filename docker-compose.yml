@@ -31,13 +31,8 @@ services:
         set -e
         # Option file keeps the password off the command line.
         printf '[client]\nhost=db\nuser="%s"\npassword="%s"\n' "$$DB_USER" "$$DB_PASSWORD" > /tmp/client.cnf
-        count=$$(mysql --defaults-extra-file=/tmp/client.cnf -N -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE()" "$$DB_NAME")
-        if [ "$$count" = "0" ]; then
-          echo "No tables in $$DB_NAME; applying database.sql"
-          mysql --defaults-extra-file=/tmp/client.cnf "$$DB_NAME" < /database.sql
-        else
-          echo "$$DB_NAME already has $$count table(s); skipping database.sql"
-        fi
+        echo "Applying idempotent database schema"
+        mysql --defaults-extra-file=/tmp/client.cnf "$$DB_NAME" < /database.sql
     depends_on:
       db:
         condition: service_healthy
